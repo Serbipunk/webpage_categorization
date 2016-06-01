@@ -3,7 +3,7 @@
 
 
 ## dependency:
-*  gcc>4.9
+*  gcc>=4.9
 * other library has been embedded in the project, including: jieba Chinese text segmentation, libSVM and sqlite.
 
 ## hints:
