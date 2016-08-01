@@ -2,6 +2,8 @@
 
 #include "TC_process.h"
 
+#include <memory.h>
+
 
 std::vector<int> v_query;
 
@@ -307,6 +309,21 @@ termFilter::~termFilter()
 	cantPassediterms.clear();
 }
 
+termFilter::termFilter() {
+	;
+}
+
+termFilter & termFilter::operator=(const termFilter & otf) {
+	cantPassediterms.resize ( otf.cantPassediterms.size() );
+	for (int i=0; i < otf.cantPassediterms.size(); ++i) {
+		char * temp = new char [ strlen (otf.cantPassediterms[i]) + 1 ];
+		memcpy( temp, otf.cantPassediterms[i], strlen (otf.cantPassediterms[i]) + 1 );
+		cantPassediterms[i] = temp;
+	}
+
+	return (*this);
+}
+
 
 bool termFilter::termIsPass(char * term)
 {
@@ -432,7 +449,7 @@ void textCategorization_new(char ** p_text, int n_text, int * p_labels, char * o
 	bool init_res = seg.init("dependency/jieba.dict.utf8");
 	////��ʼ����ѯ����sqlite3��
 	sqlite3 * conn = NULL;	//������ݿ�
-	char * err_msg = NULL;	//����ʧ�ܵ�ԭ��
+	// char * err_msg = NULL;	//����ʧ�ܵ�ԭ��
 	//����ݿ⣬��������
 	//if( SQLITE_OK != sqlite3_open("C:\\languageData_new\\new_dictionary.sqlite", &conn) )
 	if( SQLITE_OK != sqlite3_open("dependency/new_dictionary.sqlite", &conn) )
@@ -676,3 +693,180 @@ void textCategorization_new(char ** p_text, int n_text, int * p_labels, char * o
 	//return p_labels;
 }
 
+CateTeller::CateTeller() {
+	// load Chinese word segment tools
+	bool init_res = seg.init("dependency/jieba.dict.utf8");
+
+	// word vector data
+	conn = NULL;
+	if( SQLITE_OK != sqlite3_open("dependency/new_dictionary.sqlite", &conn) ) {
+		printf("can't open the database.");
+		exit(-1);
+	}
+
+	// svm model
+	svmModel = svm_load_model("dependency/trainingSet.txt.model");
+
+	// filter
+	filter = termFilter("dependency/symbelTerms.txt");
+}
+
+CateTeller::~CateTeller() {
+	/////�ͷŷִ���
+	seg.dispose();
+	//�ر�sqlite3����
+	if( SQLITE_OK != sqlite3_close(conn) ) {
+		printf("can't close the database: %s/n", sqlite3_errmsg(conn));
+		exit(-1);
+	}
+	//�ͷŷ�����
+	free(svmModel);
+}
+
+void CateTeller::tell(char ** p_text, int n_text, int * p_labels) {
+	int n_word = N_WORD;
+
+	std::vector< std::vector<char *> * > v_lines_words;		//�����еĴ�����б�
+	std::vector< std::vector<int> * > v_class_tf;		//ÿ������ÿ���г��ִ�Ƶ���б�
+	std::vector< std::vector<double> * > v_featureVector;		//��������
+
+	cut(&seg, p_text, n_text, v_lines_words, n_word, filter);
+
+	//��ÿ���ʣ��ڴʵ���Ѱ����Ӧ��Ƶ��
+	for(int iSen = 0; iSen < v_lines_words.size(); iSen++)
+	{
+		std::vector<int> * pSen_fp = new std::vector<int>;
+		v_class_tf.push_back(pSen_fp);
+
+		//std::cout << "querying no." << iSen+1 << "\n";
+		char message_t[50];
+		//sprintf(message_t, "\rquerying no.%d", iSen+1);
+		sprintf(message_t, "\r�����%d��", iSen+1);
+		std::cout << message_t;
+
+		for( int iWord = 0; iWord < (*v_lines_words.at(iSen)).size(); iWord++ )	//ÿ����10����
+		{
+			char * pWord = (*v_lines_words.at(iSen)).at(iWord);
+
+			//����ݿ������Ƶ���ѯ
+			query_word(conn, pWord);
+
+			if( v_query.size() != N_DIMEN )		//������������
+			{
+				for(int i = 0; i < N_DIMEN; i++)
+				{
+					pSen_fp->push_back( 0 );
+				}
+			}
+			else		//����û�г�������
+			{
+				for(int i = 0; i < N_DIMEN; i++)
+				{
+					pSen_fp->push_back( v_query.at(i) );
+				}
+			}
+		}
+	}
+
+	//�������������������
+	double class_n[N_DIMEN] = {13186.0, 133915.0, 29844.0, 14694.0, 235245};	//�ʵ���ÿ��ĸ���
+
+	//std::vector< std::vector<int> * > v_class_tf;		//ÿ������ÿ���г��ִ�Ƶ���б�
+	for(int iSen = 0; iSen < v_class_tf.size(); iSen++)
+	{
+		std::vector<int> * fp_thisSen = v_class_tf.at(iSen);			//�����������
+
+		std::vector<double>	* pFeatureV = new std::vector<double>;		//�������������м����������
+		v_featureVector.push_back(pFeatureV);
+
+		for(int iWord = 0; iWord < 10; iWord++)			//ÿ�乲10����
+		{
+			double norm_fp[N_DIMEN];			//�����һ����TF
+			double max_nfp = 0.0;		//���TF
+			double sum_nfp = 0.0;		//TF֮��
+
+			for(int i = 0; i < N_DIMEN; i++)
+			{
+				norm_fp[i] = 10000.0 * (double)(fp_thisSen->at( N_DIMEN*iWord + i ))/class_n[i];
+				sum_nfp += norm_fp[i];
+				if(max_nfp < norm_fp[i])
+				{
+					max_nfp = norm_fp[i];
+				}
+			}
+
+			max_nfp /= 10.0;		//�ǳ���10�󾭹�sigmoid����
+			double f1 = 2.0/( 1.0 + exp(-0.10986*max_nfp) ) - 1.0;
+
+			if(sum_nfp != 0)
+			{
+				pFeatureV->push_back( f1 );
+				for(int i = 0; i < N_DIMEN; i++)
+				{
+					pFeatureV->push_back( norm_fp[i]/sum_nfp );
+				}
+			}
+			else
+			{
+				pFeatureV->push_back( f1 );
+				for(int i = 0; i < N_DIMEN; i++)
+				{
+					pFeatureV->push_back( 0.0 );
+				}
+			}
+		}
+	}
+
+
+	////svm������~
+
+	for(int iFV = 0; iFV < v_featureVector.size(); iFV++)	//����ÿ����¼
+	{
+		std::vector<double> * pFV = v_featureVector.at(iFV);
+		struct svm_node * svmData = (struct svm_node *)malloc( (50+1)*sizeof(struct svm_node) );
+		for(int i = 0; i < 50; i++)
+		{
+			svmData[i].index = i+1;
+			svmData[i].value = pFV->at(i);
+		}
+		svmData[50].index = -1;
+
+		int label = svm_predict(svmModel, svmData);
+
+		//l_labels.push_back(label);
+		p_labels[iFV] = label;
+
+		//std::cout << iFV+1 << " : " << label << "\n";
+
+		free(svmData);
+	}
+
+	//// do some cleanup
+
+	//�ͷ�ȡ���б�v_lines_words
+	for( int iSen = 0; iSen < v_lines_words.size(); iSen++ )
+	{
+		std::vector<char *> * p_vSen = v_lines_words.at(iSen);
+		for(int iWord = 0; iWord < p_vSen->size(); iWord++)
+		{
+			delete [] (char*)(p_vSen->at(iWord));
+		}
+		p_vSen->clear();
+	}
+	v_lines_words.clear();
+	//�ͷŲ�ѯ��Ƶ�б�
+	for( int iSen = 0; iSen < v_class_tf.size(); iSen++ )
+	{
+		v_class_tf.at(iSen)->clear();
+	}
+	v_class_tf.clear();
+	//�ͷ�������������
+	for( int iVec = 0; iVec < v_featureVector.size(); iVec++ )
+	{
+		v_featureVector.at(iVec)->clear();
+	}
+	v_featureVector.clear();
+
+	v_query.clear();
+
+}

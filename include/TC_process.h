@@ -39,12 +39,15 @@ int sqlite3_exec_callback(void *data, int n_columns, char **col_values, char **c
 //�ļ���������
 class termFilter
 {
-private:
+public:
 	std::vector<char *> cantPassediterms;
 
 public:
 	termFilter( const char * loadPath );
+	termFilter();
 	~termFilter();
+
+	termFilter & operator=(const termFilter & rhs);
 
 	void appendFilter( char * loadPath );
 
@@ -56,3 +59,17 @@ public:
 void cut(const CppJieba::SegmentInterface * seg, char ** p_text, int n_text, std::vector<std::vector<char *> *> & v_lines_words, int n_word, termFilter & filter);
 
 void textCategorization_new(char ** p_text, int n_text, int * p_labels, char * outputPath=NULL);
+
+class CateTeller {
+private:
+	CppJieba::MPSegment seg;
+	sqlite3 * conn;
+	struct svm_model * svmModel;
+	termFilter filter;
+
+public:
+	CateTeller();
+	~CateTeller();
+
+	void tell(char ** p_text, int n_text, int * p_labels);
+};
