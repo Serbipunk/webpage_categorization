@@ -16,6 +16,7 @@ $(BUILD)/main: $(BUILD)/main.o $(BUILD)/combinition.o $(BUILD)/libClassifier.o $
 	$(LINK) $(LDFLAGS) $^ -o $@
 
 $(BUILD)/combinition.o: $(SRC)/combinition.cpp
+	mkdir -p $(BUILD)
 	$(CXX) $^ $(CFLAGS) -c -o $@
 
 $(BUILD)/libClassifier.o: $(SRC)/libClassifier.cpp
