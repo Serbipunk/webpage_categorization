@@ -6,31 +6,38 @@ LINK=g++
 
 SRC=./src
 INCLUDE=./include
-BUILD=./build
+BUILD_DIR=./build
+BIN_DIR=./build/bin
 TOOL_SRC=./tool
 
-.PHONY: all
-all: $(BUILD)/main
+MKDIR_P=mkdir -p
+.PHONY: directories
 
-$(BUILD)/main: $(BUILD)/main.o $(BUILD)/combinition.o $(BUILD)/libClassifier.o $(BUILD)/sqlite3.o $(BUILD)/TC_process.o
+all: directories $(BIN_DIR)/main
+
+directories: $(BUILD_DIR)
+
+${BUILD_DIR}:
+	$(MKDIR_P) $(BUILD_DIR)
+	$(MKDIR_P) $(BIN_DIR)
+
+$(BIN_DIR)/main: $(BUILD_DIR)/main.o $(BUILD_DIR)/combinition.o $(BUILD_DIR)/libClassifier.o $(BUILD_DIR)/sqlite3.o $(BUILD_DIR)/TC_process.o
 	$(LINK) $(LDFLAGS) $^ -o $@
 
-$(BUILD)/combinition.o: $(SRC)/combinition.cpp
-	mkdir -p $(BUILD)
+$(BUILD_DIR)/combinition.o: $(SRC)/combinition.cpp
 	$(CXX) $^ $(CFLAGS) -c -o $@
 
-$(BUILD)/libClassifier.o: $(SRC)/libClassifier.cpp
+$(BUILD_DIR)/libClassifier.o: $(SRC)/libClassifier.cpp
 	$(CXX) $^ $(CFLAGS) -c -o $@
 
-$(BUILD)/sqlite3.o: $(SRC)/sqlite3.c
+$(BUILD_DIR)/sqlite3.o: $(SRC)/sqlite3.c
 	$(C) $^ $(CFLAGS) -c -o $@
 
-$(BUILD)/TC_process.o: $(SRC)/TC_process.cpp
+$(BUILD_DIR)/TC_process.o: $(SRC)/TC_process.cpp
 	$(CXX) $^ $(CFLAGS) -c -o $@
 
-$(BUILD)/main.o: $(TOOL_SRC)/main.cpp
+$(BUILD_DIR)/main.o: $(TOOL_SRC)/main.cpp
 	$(CXX) $^ $(CFLAGS) -c -o $@
 
 clean:
-	rm build/*.o
-	rm -f build/main
+	rm -rf build
